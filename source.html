@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Cat Art</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #canvas-container {
+            width: 100%;
+            max-width: 1200px;
+            height: 100vh;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            pointer-events: none;
+        }
+    </style>
+
+<base target="_self">
+
+
+    <div id="canvas-container">
+        <div id="info">Click to change style • Drag to create cats • Move mouse to interact</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.8.0/lib/p5.js"></script>
+    <script>
+        const sketch = (p) => {
+            let cats = [];
+            let currentStyle = 0;
+            let bgColor;
+            let palette;
+            let particles = [];
+            let lastMouseX = 0;
+            let lastMouseY = 0;
+            let mouseVelocity = p.createVector(0, 0);
+            const styles = ['cartoon', 'animated', 'parametric', 'pixel', 'abstract'];
+            const palettes = [
+                ['#FFBE0B', '#FB5607', '#FF006E', '#8338EC', '#3A86FF'],
+                ['#8ECAE6', '#219EBC', '#023047', '#FFB703', '#FB8500'],
+                ['#F72585', '#B5179E', '#7209B7', '#560BAD', '#480CA8'],
+                ['#FF9F1C', '#FFBF69', '#FFFFFF', '#CBF3F0', '#2EC4B6'],
+                ['#606C38', '#283618', '#FEFAE0', '#DDA15E', '#BC6C25']
+            ];
+
+            p.setup = () => {
+                let canvas = p.createCanvas(p.windowWidth, p.windowHeight);
+                canvas.parent('canvas-container');
+                bgColor = p.color(40);
+                palette = palettes[0];
+                p.noStroke();
+                p.rectMode(p.CENTER);
+                p.angleMode(p.DEGREES);
+                
+                // Create initial cats
+                for (let i = 0; i < 3; i++) {
+                    cats.push(createCat(p.random(p.width), p.random(p.height), styles[currentStyle]));
+                }
+            };
+
+            p.draw = () => {
+                // Update mouse velocity
+                mouseVelocity.x = p.mouseX - lastMouseX;
+                mouseVelocity.y = p.mouseY - lastMouseY;
+                lastMouseX = p.mouseX;
+                lastMouseY = p.mouseY;
+
+                // Fading background
+                p.fill(bgColor);
+                p.rect(p.width/2, p.height/2, p.width, p.height);
+
+                // Update and display particles
+                updateParticles();
+                
+                // Update and display cats
+                for (let cat of cats) {
+                    updateCat(cat);
+                    displayCat(cat);
+                }
+
+                // Limit number of cats
+                if (cats.length > 20) {
+                    cats.splice(0, cats.length - 20);
+                }
+            };
+
+            function createCat(x, y, style) {
+                let size = p.random(50, 150);
+                let cat = {
+                    x: x,
+                    y: y,
+                    size: size,
+                    style: style,
+                    color: p.color(palette[p.floor(p.random(palette.length))]),
+                    angle: p.random(360),
+                    speed: p.random(0.5, 2),
+                    targetX: x,
+                    targetY: y,
+                    tailAngle: 0,
+                    tailDirection: 1,
+                    blinkTimer: p.floor(p.random(60, 180)),
+                    isBlinking: false,
+                    eyeColor: p.color(255),
+                    whiskerLength: size * 0.6,
+                    earSize: size * 0.3,
+                    mood: p.random(['happy', 'curious', 'sleepy']),
+                    particles: []
+                };
+                return cat;
+            }
+
+            function updateCat(cat) {
+                // Move toward target with some randomness
+                cat.x = p.lerp(cat.x, cat.targetX, 0.05);
+                cat.y = p.lerp(cat.y, cat.targetY, 0.05);
+                
+                // Randomly change target
+                if (p.random() < 0.01) {
+                    cat.targetX = p.constrain(cat.x + p.random(-200, 200), 50, p.width - 50);
+                    cat.targetY = p.constrain(cat.y + p.random(-200, 200), 50, p.height - 50);
+                }
+
+                // Tail animation
+                cat.tailAngle += cat.tailDirection * 2;
+                if (cat.tailAngle > 30) cat.tailDirection *= -1;
+
+                // Blinking animation
+                cat.blinkTimer--;
+                if (cat.blinkTimer <= 0) {
+                    cat.isBlinking = true;
+                    setTimeout(() => {
+                        cat.isBlinking = false;
+                        cat.blinkTimer = p.floor(p.random(60, 180));
+                    }, 200);
+                }
+
+                // React to mouse
+                let mouseDist = p.dist(cat.x, cat.y, p.mouseX, p.mouseY);
+                if (mouseDist < 200) {
+                    let angleToMouse = p.atan2(p.mouseY - cat.y, p.mouseX - cat.x);
+                    if (mouseDist < 100) {
+                        // Move away from mouse
+                        cat.targetX = cat.x - p.cos(angleToMouse) * 50;
+                        cat.targetY = cat.y - p.sin(angleToMouse) * 50;
+                    } else {
+                        // Look at mouse
+                        cat.angle = angleToMouse;
+                    }
+                }
+
+                // Add occasional particles
+                if (p.random() < 0.02) {
+                    addParticle(cat.x, cat.y, cat.color);
+                }
+            }
+
+            function displayCat(cat) {
+                p.push();
+                p.translate(cat.x, cat.y);
+                p.rotate(cat.angle);
+
+                switch (cat.style) {
+                    case 'cartoon':
+                        drawCartoonCat(cat);
+                        break;
+                    case 'animated':
+                        drawAnimatedCat(cat);
+                        break;
+                    case 'parametric':
+                        drawParametricCat(cat);
+                        break;
+                    case 'pixel':
+                        drawPixelCat(cat);
+                        break;
+                    case 'abstract':
+                        drawAbstractCat(cat);
+                        break;
+                }
+
+                p.pop();
+            }
+
+            function drawCartoonCat(cat) {
+                // Body
+                p.fill(cat.color);
+                p.ellipse(0, 0, cat.size, cat.size * 0.8);
+                
+                // Head
+                p.ellipse(0, -cat.size * 0.3, cat.size * 0.6, cat.size * 0.6);
+                
+                // Ears
+                p.triangle(-cat.size * 0.2, -cat.size * 0.5, -cat.size * 0.3, -cat.size * 0.7, -cat.size * 0.1, -cat.size * 0.7);
+                p.triangle(cat.size * 0.2, -cat.size * 0.5, cat.size * 0.3, -cat.size * 0.7, cat.size * 0.1, -cat.size * 0.7);
+                
+                // Eyes
+                let eyeOpen = cat.isBlinking ? 2 : cat.size * 0.1;
+                p.fill(255);
+                p.ellipse(-cat.size * 0.1, -cat.size * 0.35, cat.size * 0.15, eyeOpen);
+                p.ellipse(cat.size * 0.1, -cat.size * 0.35, cat.size * 0.15, eyeOpen);
+                p.fill(0);
+                p.ellipse(-cat.size * 0.1, -cat.size * 0.35, cat.size * 0.05);
+                p.ellipse(cat.size * 0.1, -cat.size * 0.35, cat.size * 0.05);
+                
+                // Nose
+                p.fill(255, 100, 100);
+                p.triangle(0, -cat.size * 0.3, -cat.size * 0.05, -cat.size * 0.25, cat.size * 0.05, -cat.size * 0.25);
+                
+                // Whiskers
+                p.stroke(150);
+                p.strokeWeight(1);
+                p.line(-cat.size * 0.05, -cat.size * 0.25, -cat.size * 0.3, -cat.size * 0.2);
+                p.line(-cat.size * 0.05, -cat.size * 0.25, -cat.size * 0.3, -cat.size * 0.25);
+                p.line(-cat.size * 0.05, -cat.size * 0.25, -cat.size * 0.3, -cat.size * 0.3);
+                p.line(cat.size * 0.05, -cat.size * 0.25, cat.size * 0.3, -cat.size * 0.2);
+                p.line(cat.size * 0.05, -cat.size * 0.25, cat.size * 0.3, -cat.size * 0.25);
+                p.line(cat.size * 0.05, -cat.size * 0.25, cat.size * 0.3, -cat.size * 0.3);
+                p.noStroke();
+                
+                // Tail
+                p.push();
+                p.translate(cat.size * 0.4, 0);
+                p.rotate(cat.tailAngle);
+                p.ellipse(0, 0, cat.size * 0.3, cat.size * 0.6);
+                p.pop();
+            }
+
+            function drawAnimatedCat(cat) {
+                // More dynamic version with enhanced animation
+                let bodyWobble = p.sin(p.frameCount * 2) * 2;
+                
+                // Body
+                p.fill(cat.color);
+                p.ellipse(0, bodyWobble, cat.size, cat.size * 0.8);
+                
+                // Head with subtle movement
+                let headBob = p.sin(p.frameCount * 3) * 1;
+                p.ellipse(0, -cat.size * 0.3 + headBob, cat.size * 0.6, cat.size * 0.6);
+                
+                // Dynamic ears
+                p.triangle(-cat.size * 0.2, -cat.size * 0.5, -cat.size * 0.3, -cat.size * 0.7, -cat.size * 0.1, -cat.size * 0.7 + headBob);
+                p.triangle(cat.size * 0.2, -cat.size * 0.5, cat.size * 0.3, -cat.size * 0.7, cat.size * 0.1, -cat.size * 0.7 + headBob);
+                
+                // Expressive eyes
+                let eyeSize = cat.isBlinking ? 2 : cat.size * 0.1;
+                let pupilOffsetX = p.constrain(mouseVelocity.x * 0.1, -5, 5);
+                let pupilOffsetY = p.constrain(mouseVelocity.y * 0.1, -5, 5);
+                
+                p.fill(255);
+                p.ellipse(-cat.size * 0.1, -cat.size * 0.35, cat.size * 0.15, eyeSize);
+                p.ellipse(cat.size * 0.1, -cat.size * 0.35, cat.size * 0.15, eyeSize);
+                p.fill(0);
+                p.ellipse(-cat.size * 0.1 + pupilOffsetX, -cat.size * 0.35 + pupilOffsetY, cat.size * 0.05);
+                p.ellipse(cat.size * 0.1 + pupilOffsetX, -cat.size * 0.35 + pupilOffsetY, cat.size * 0.05);
+                
+                // Nose
+                p.fill(255, 100, 100);
+                p.triangle(0, -cat.size * 0.3, -cat.size * 0.05, -cat.size * 0.25, cat.size * 0.05, -cat.size * 0.25);
+                
+                // Animated whiskers
+                let whiskerWave = p.sin(p.frameCount * 5) * 3;
+                p.stroke(150);
+                p.strokeWeight(1);
+                for (let i = 0; i < 3; i++) {
+                    let yOffset = i * 5 - 5;
+                    p.line(-cat.size * 0.05, -cat.size * 0.25 + yOffset, -cat.size * 0.3, -cat.size * 0.2 + yOffset + whiskerWave);
+                    p.line(cat.size * 0.05, -cat.size * 0.25 + yOffset, cat.size * 0.3, -cat.size * 0.2 + yOffset + whiskerWave);
+                }
+                p.noStroke();
+                
+                // More dynamic tail
+                p.push();
+                p.translate(cat.size * 0.4, 0);
+                p.rotate(cat.tailAngle * 1.5);
+                p.ellipse(0, 0, cat.size * 0.3, cat.size * 0.8);
+                p.pop();
+            }
+
+            function drawParametricCat(cat) {
+                // Body with parametric controls
+                p.fill(cat.color);
+                p.ellipse(0, 0, cat.size, cat.size * 0.8 * (0.7 + cat.earSize / cat.size));
+                
+                // Head
+                p.ellipse(0, -cat.size * 0.3, cat.size * 0.6, cat.size * 0.6);
+                
+                // Ears with size parameter
+                p.triangle(-cat.size * 0.2, -cat.size * 0.5, -cat.size * 0.2 - cat.earSize, -cat.size * 0.5 - cat.earSize, -cat.size * 0.2 + cat.earSize * 0.5, -cat.size * 0.5 - cat.earSize);
+                p.triangle(cat.size * 0.2, -cat.size * 0.5, cat.size * 0.2 + cat.earSize, -cat.size * 0.5 - cat.earSize, cat.size * 0.2 - cat.earSize * 0.5, -cat.size * 0.5 - cat.earSize);
+                
+                // Eyes
+                let eyeOpen = cat.isBlinking ? 2 : cat.size * 0.1;
+                p.fill(255);
+                p.ellipse(-cat.size * 0.1, -cat.size * 0.35, cat.size * 0.15, eyeOpen);
+                p.ellipse(cat.size * 0.1, -cat.size * 0.35, cat.size * 0.15, eyeOpen);
+                p.fill(0);
+                p.ellipse(-cat.size * 0.1, -cat.size * 0.35, cat.size * 0.05);
+                p.ellipse(cat.size * 0.1, -cat.size * 0.35, cat.size * 0.05);
+                
+                // Nose
+                p.fill(255, 100, 100);
+                p.triangle(0, -cat.size * 0.3, -cat.size * 0.05, -cat.size * 0.25, cat.size * 0.05, -cat.size * 0.25);
+                
+                // Parametric whiskers
+                p.stroke(150);
+                p.strokeWeight(1);
+                for (let i = 0; i < 3; i++) {
+                    let yOffset = i * 5 - 5;
+                    p.line(-cat.size * 0.05, -cat.size * 0.25 + yOffset, -cat.whiskerLength, -cat.size * 0.2 + yOffset);
+                    p.line(cat.size * 0.05, -cat.size * 0.25 + yOffset, cat.whiskerLength, -cat.size * 0.2 + yOffset);
+                }
+                p.noStroke();
+                
+                // Tail
+                p.push();
+                p.translate(cat.size * 0.4, 0);
+                p.rotate(cat.tailAngle);
+                p.ellipse(0, 0, cat.size * 0.3, cat.size * 0.6);
+                p.pop();
+            }
+
+            function drawPixelCat(cat) {
+                let pixelSize = cat.size / 10;
+                
+                // Body
+                p.fill(cat.color);
+                for (let x = -5; x <= 5; x++) {
+                    for (let y = -4; y <= 4; y++) {
+                        if (x*x + y*y*1.5 < 20) {
+                            p.rect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+                        }
+                    }
+                }
+                
+                // Head
+                for (let x = -3; x <= 3; x++) {
+                    for (let y = -6; y <= -3; y++) {
+                        if (x*x + y*y < 16) {
+                            p.rect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+                        }
+                    }
+                }
+                
+                // Ears
+                p.rect(-3 * pixelSize, -7 * pixelSize, pixelSize, pixelSize * 2);
+                p.rect(-2 * pixelSize, -8 * pixelSize, pixelSize, pixelSize);
+                p.rect(3 * pixelSize, -7 * pixelSize, pixelSize, pixelSize * 2);
+                p.rect(2 * pixelSize, -8 * pixelSize, pixelSize, pixelSize);
+                
+                // Eyes
+                let eyeOpen = cat.isBlinking ? 0 : 1;
+                if (eyeOpen) {
+                    p.fill(255);
+                    p.rect(-2 * pixelSize, -5 * pixelSize, pixelSize, pixelSize);
+                    p.rect(1 * pixelSize, -5 * pixelSize, pixelSize, pixelSize);
+                    p.fill(0);
+                    p.rect(-2 * pixelSize, -5 * pixelSize, pixelSize/2, pixelSize/2);
+                    p.rect(1 * pixelSize, -5 * pixelSize, pixelSize/2, pixelSize/2);
+                } else {
+                    p.fill(0);
+                    p.rect(-2 * pixelSize, -5 * pixelSize, pixelSize, 1);
+                    p.rect(1 * pixelSize, -5 * pixelSize, pixelSize, 1);
+                }
+                
+                // Nose
+                p.fill(255, 100, 100);
+                p.rect(0, -4 * pixelSize, pixelSize, pixelSize/2);
+                
+                // Mouth
+                p.fill(0);
+                p.rect(0, -3 * pixelSize, 1, 1);
+                p.rect(-1 * pixelSize, -2 * pixelSize, 1, 1);
+                p.rect(1 * pixelSize, -2 * pixelSize, 1, 1);
+                
+                // Tail
+                p.fill(cat.color);
+                for (let i = 0; i < 5; i++) {
+                    let offset = i * 2 - 4;
+                    p.rect(6 * pixelSize, offset * pixelSize, pixelSize, pixelSize);
+                }
+            }
+
+            function drawAbstractCat(cat) {
+                // Abstract geometric interpretation
+                p.fill(cat.color);
+                
+                // Body shape
+                p.beginShape();
+                for (let angle = 0; angle < 360; angle += 30) {
+                    let rad = p.radians(angle);
+                    let radius = cat.size * 0.4 * (1 + 0.2 * p.sin(angle * 3 + p.frameCount));
+                    p.vertex(radius * p.cos(rad), radius * p.sin(rad) * 0.7);
+                }
+                p.endShape(p.CLOSE);
+                
+                // Head shape
+                p.push();
+                p.translate(0, -cat.size * 0.3);
+                p.beginShape();
+                for (let angle = 0; angle < 360; angle += 45) {
+                    let rad = p.radians(angle);
+                    let radius = cat.size * 0.2 * (1 + 0.1 * p.cos(angle * 4));
+                    p.vertex(radius * p.cos(rad), radius * p.sin(rad));
+                }
+                p.endShape(p.CLOSE);
+                p.pop();
+                
+                // Eyes
+                let eyeSize = cat.size * 0.1;
+                p.fill(255);
+                p.ellipse(-cat.size * 0.15, -cat.size * 0.35, eyeSize, eyeSize);
+                p.ellipse(cat.size * 0.15, -cat.size * 0.35, eyeSize, eyeSize);
+                p.fill(0);
+                p.ellipse(-cat.size * 0.15, -cat.size * 0.35, eyeSize * 0.3);
+                p.ellipse(cat.size * 0.15, -cat.size * 0.35, eyeSize * 0.3);
+                
+                // Abstract ears
+                p.triangle(-cat.size * 0.2, -cat.size * 0.5, -cat.size * 0.3, -cat.size * 0.8, -cat.size * 0.1, -cat.size * 0.7);
+                p.triangle(cat.size * 0.2, -cat.size * 0.5, cat.size * 0.3, -cat.size * 0.8, cat.size * 0.1, -cat.size * 0.7);
+                
+                // Abstract whiskers
+                p.stroke(255, 150);
+                p.strokeWeight(2);
+                for (let i = 0; i < 5; i++) {
+                    let angle = p.map(i, 0, 4, -30, 30);
+                    let length = cat.size * 0.5;
+                    p.line(0, -cat.size * 0.25, length * p.cos(angle), -cat.size * 0.25 + length * p.sin(angle));
+                    p.line(0, -cat.size * 0.25, -length * p.cos(angle), -cat.size * 0.25 + length * p.sin(angle));
+                }
+                p.noStroke();
+                
+                // Abstract tail
+                p.push();
+                p.translate(cat.size * 0.4, 0);
+                p.rotate(cat.tailAngle * 2);
+                p.beginShape();
+                for (let angle = 0; angle < 360; angle += 60) {
+                    let rad = p.radians(angle);
+                    let radius = cat.size * 0.15 * (1 + 0.3 * p.sin(angle * 2 + p.frameCount * 2));
+                    p.vertex(radius * p.cos(rad), radius * p.sin(rad));
+                }
+                p.endShape(p.CLOSE);
+                p.pop();
+            }
+
+            function addParticle(x, y, color) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    size: p.random(2, 6),
+                    color: color,
+                    life: p.random(30, 90),
+                    speed: p.random(0.5, 2),
+                    angle: p.random(360),
+                    alpha: 255
+                });
+            }
+
+            function updateParticles() {
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    let pcl = particles[i];
+                    pcl.x += p.cos(pcl.angle) * pcl.speed;
+                    pcl.y += p.sin(pcl.angle) * pcl.speed;
+                    pcl.life--;
+                    pcl.alpha = p.map(pcl.life, 0, 90, 0, 255);
+                    
+                    if (pcl.life <= 0) {
+                        particles.splice(i, 1);
+                    } else {
+                        let c = p.color(pcl.color);
+                        c.setAlpha(pcl.alpha);
+                        p.fill(c);
+                        p.noStroke();
+                        p.ellipse(pcl.x, pcl.y, pcl.size);
+                    }
+                }
+                
+                // Limit particles
+                if (particles.length > 500) {
+                    particles.splice(0, particles.length - 500);
+                }
+            }
+
+            p.mousePressed = () => {
+                // Change style on click
+                currentStyle = (currentStyle + 1) % styles.length;
+                palette = palettes[currentStyle];
+                bgColor = p.color(palette[p.floor(p.random(palette.length))]);
+                bgColor.setAlpha(50);
+                
+                // Create new cat at mouse position
+                cats.push(createCat(p.mouseX, p.mouseY, styles[currentStyle]));
+                
+                // Add burst of particles
+                for (let i = 0; i < 30; i++) {
+                    addParticle(p.mouseX, p.mouseY, p.color(palette[p.floor(p.random(palette.length))]));
+                }
+            };
+
+            p.mouseDragged = () => {
+                // Create cats while dragging
+                if (p.frameCount % 5 === 0) {
+                    cats.push(createCat(p.mouseX, p.mouseY, styles[currentStyle]));
+                }
+                
+                // Add trail particles
+                if (p.frameCount % 2 === 0) {
+                    addParticle(p.mouseX, p.mouseY, p.color(palette[p.floor(p.random(palette.length))]));
+                }
+            };
+
+            p.windowResized = () => {
+                p.resizeCanvas(p.windowWidth, p.windowHeight);
+            };
+        };
+
+        new p5(sketch);
+    </script>
+
+              
+          
+                
+          
+              
